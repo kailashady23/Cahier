@@ -1,5 +1,5 @@
 // Keeps the app working offline. Bump VERSION with every release.
-const VERSION = "cahier-v2";
+const VERSION = "cahier-v3";
 const FILES = ["./","index.html","style.css","app.js","logic.js","content.js","config.js","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","fonts/young-serif-latin-400-normal.woff2","fonts/atkinson-hyperlegible-latin-400-normal.woff2","fonts/atkinson-hyperlegible-latin-700-normal.woff2"];
 self.addEventListener("install", e => e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())));

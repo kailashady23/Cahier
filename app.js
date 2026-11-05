@@ -26,10 +26,14 @@
   const show = (...nodes) => { view.replaceChildren(...nodes.flat().filter(Boolean)); window.scrollTo(0, 0); };
 
   // French speech uses the device's own voice. It prefers Canadian French when available.
+  const SPEEDS = [["Very slow", .5], ["Slow", .7], ["Normal", .9]];
+  let speed = Math.min(2, Math.max(0, Number(load("cahier-speed", 2)))), lastSaid = "";
+  function setSpeed(i) { speed = i; store("cahier-speed", i); }
   function say(text) {
     const sp = window.speechSynthesis; if (!sp) return;
+    lastSaid = text;
     sp.cancel(); const u = new SpeechSynthesisUtterance(text), vs = sp.getVoices();
-    u.lang = "fr-CA"; u.rate = .9;
+    u.lang = "fr-CA"; u.rate = SPEEDS[speed][1];
     u.voice = vs.find(v => /^fr[-_]CA/i.test(v.lang)) || vs.find(v => /^fr/i.test(v.lang)) || null;
     if (u.voice) u.lang = u.voice.lang; sp.speak(u);
   }
@@ -154,6 +158,7 @@
         a ? [h("p", { class: "small" }, "Signed in as " + a.email), btn("Sync now", () => sync(true).then(() => settings()), "quiet"), btn("Sign out", () => { localStorage.removeItem(AUTH); settings(); setDot("Saved on this device"); }, "quiet")] :
         h("form", { class: "card", style: "border:0;padding:0", on: { submit: e => e.preventDefault() } }, h("label", {}, "Email", email), h("label", {}, "Password (at least 6 characters)", pass),
           h("div", { class: "row" }, btn("Sign in", () => auth("token?grant_type=password", email.value, pass.value, msg), "primary"), btn("Create account", () => auth("signup", email.value, pass.value, msg))))),
+      h("div", { class: "card" }, h("h3", {}, "Voice speed"), h("div", { class: "row" }, SPEEDS.map(([label], i) => h("button", { type: "button", class: "btn " + (i === speed ? "primary" : "quiet"), "aria-pressed": i === speed ? "true" : "false", on: { click: () => { setSpeed(i); say("Bonjour, je m'appelle Paul."); settings(); } } }, label)))),
       h("div", { class: "card" }, h("h3", {}, "Backup"), h("p", { class: "small muted" }, "Save a copy of all your progress as a file."),
         btn("Export backup", () => { const u = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: "application/json" })); const l = h("a", { href: u, download: `cahier-backup-${L.ymd(now())}.json` }); l.click(); URL.revokeObjectURL(u); }, "quiet"),
         btn("Restore from a backup", () => file.click(), "quiet"), file, msg),
@@ -231,7 +236,13 @@
   }
   function header() {
     const p = session.steps.length ? session.i / session.steps.length * 100 : 0;
-    return h("div", { class: "progress" }, h("div", { class: "bar" }, h("i", { style: `width:${p}%` })), h("button", { type: "button", class: "close", on: { click: () => endSession() } }, "Exit"));
+    return h("div", { class: "progress" }, h("div", { class: "bar" }, h("i", { style: `width:${p}%` })), speedBtn(), h("button", { type: "button", class: "close", on: { click: () => endSession() } }, "Exit"));
+  }
+  // Each tap moves to the next speed and replays the last French line, so you can compare.
+  function speedBtn() {
+    return h("button", { type: "button", class: "close", "aria-label": "Voice speed: " + SPEEDS[speed][0] + ". Tap to change.", on: { click: e => {
+      setSpeed((speed + 1) % SPEEDS.length); e.currentTarget.replaceWith(speedBtn()); if (lastSaid) say(lastSaid);
+    } } }, "Voice: " + SPEEDS[speed][0]);
   }
   function next() { session.i++; step(); }
   function step() {
