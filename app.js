@@ -412,7 +412,12 @@
 
   // ---------- Start ----------
   addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (tab === "today" && !session) today(); });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    // When a new version takes over, reload once to show it, unless you're in the middle of a session.
+    const hadOld = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadOld && !session) location.reload(); });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(r => r.update()).catch(() => {});
+  }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   window.speechSynthesis && window.speechSynthesis.getVoices();
   go("today"); sync();
