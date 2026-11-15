@@ -242,8 +242,12 @@
     try {
       msg.textContent = "One moment…";
       const r = await fetch(`${CFG.supabaseUrl}/auth/v1/${path}`, { method: "POST", headers: { apikey: CFG.supabaseKey, "Content-Type": "application/json" }, body: JSON.stringify({ email: em.trim(), password: pw }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.msg || j.error_description || "Check your email and password.");
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const why = j.msg || j.error_description || j.message || "";
+        if (r.status >= 500 || !why) throw new Error(`The cloud didn't answer (error ${r.status}). If your Supabase project is paused, restore it, then try again.`);
+        throw new Error(why + ` (error ${r.status})`);
+      }
       if (!j.access_token) { msg.textContent = "Check your email to confirm your account, then sign in."; return; }
       store(AUTH, { email: j.user.email, uid: j.user.id, access: j.access_token, refresh: j.refresh_token, exp: now() + j.expires_in * 1000 });
       await sync(true); settings();
