@@ -1,7 +1,7 @@
 // Screens and app flow.
 (function () {
   const L = window.Logic, C = window.COURSE, CFG = window.CAHIER_CONFIG || {};
-  const KEY = "cahier-state-v1", AUTH = "cahier-auth-v1", UNIT = C.units["a1-u1"];
+  const KEY = "cahier-state-v1", AUTH = "cahier-auth-v1";
   const view = document.getElementById("view"), dock = document.getElementById("dock"), dot = document.getElementById("syncdot");
   const load = (k, f) => { try { return JSON.parse(localStorage.getItem(k)) || f; } catch { return f; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -37,7 +37,13 @@
     u.voice = vs.find(v => /^fr[-_]CA/i.test(v.lang)) || vs.find(v => /^fr/i.test(v.lang)) || null;
     if (u.voice) u.lang = u.voice.lang; sp.speak(u);
   }
-  const lessons = () => UNIT.lessons;
+  // Modules in course order. Each lesson id is unique across all modules.
+  const UNITS = () => (C.order || Object.keys(C.units)).map(k => C.units[k]).filter(Boolean);
+  const lessons = () => UNITS().flatMap(u => u.lessons);
+  const unitOf = l => UNITS().find(u => u.lessons.includes(l));
+  const unitDone = u => u.lessons.every(l => S.lessons[l.id] && S.lessons[l.id].done);
+  const currentUnit = () => unitOf(nextLesson()) || UNITS()[UNITS().length - 1];
+  const unitLabel = u => { const m = /^([a-z]\d)-u(\d+)$/i.exec(u.id); return m ? `${m[1].toUpperCase()} · Module ${m[2]}` : u.title; };
   const allQ = () => lessons().flatMap(l => l.questions.map(q => ({ ...q, lesson: l.id })));
   const qById = id => allQ().find(q => q.id === id);
   const nextLesson = () => lessons().find(l => !(S.lessons[l.id] && S.lessons[l.id].done));
@@ -95,7 +101,18 @@
     review: '<path d="M12 4 21 20H3z"/><path d="M12 10v4M12 17h.01"/>',
     retry: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
     later: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>',
-    tick: '<path d="m6 12.5 4 4L18 8"/>'
+    tick: '<path d="m6 12.5 4 4L18 8"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>',
+    stack: '<path d="M4 7h11v13H4z"/><path d="M8 4h12v13"/>',
+    hand: '<path d="M6 14V8a1.5 1.5 0 0 1 3 0v4M9 11V5a1.5 1.5 0 0 1 3 0v6M12 10V6a1.5 1.5 0 0 1 3 0v6M15 11a1.5 1.5 0 0 1 3 0v3a7 7 0 0 1-7 7h-1a6 6 0 0 1-4.5-2.2L3 15.5"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+    ruler: '<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>',
+    question: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6v.3M12 17h.01"/>',
+    pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>',
+    calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+    heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+    walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="m9 21 3-7 3 3v4M7 12l3-4 4 1 2 3M12 14l-1-5"/>' 
   };
   function icon(name, cls) { const e = h("span", { class: "ico " + (cls || ""), "aria-hidden": "true" }); e.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + "</svg>"; return e; }
   const STATUS = { progress: ["progress", "In progress"], done: ["done", "Done"], review: ["review", "Review"], retry: ["retry", "Retry"], later: ["later", "Coming"] };
@@ -120,12 +137,12 @@
       h("span", { class: "ltext" }, h("b", {}, l.title), h("span", { class: "desc" }, l.desc || ""), k.st ? status(k.st) : h("span", { class: "desc mins" }, isNext ? `Up next · ${l.minutes} min` : `${l.minutes} min`)),
       ring(k.pct));
   }
-  function moduleBlock() {
-    const n = lessons().filter(l => S.lessons[l.id] && S.lessons[l.id].done).length, pct = Math.round(n / lessons().length * 100);
+  function moduleBlock(u) {
+    const ls = u.lessons, n = ls.filter(l => S.lessons[l.id] && S.lessons[l.id].done).length, pct = Math.round(n / ls.length * 100);
     return h("section", { class: "module" },
-      h("div", { class: "mhead" }, h("div", {}, h("span", { class: "eyebrow" }, "A1 · Module 1"), h("h2", {}, UNIT.title)),
-        h("div", { class: "mbar" }, h("div", { class: "bar" }, h("i", { style: `width:${pct}%` })), h("span", { class: "small muted" }, `${n} of ${lessons().length} lessons`))),
-      h("div", { class: "lessons" }, lessons().map(lessonRow)));
+      h("div", { class: "mhead" }, h("div", {}, h("span", { class: "eyebrow" }, unitLabel(u)), h("h2", {}, u.title)),
+        h("div", { class: "mbar" }, h("div", { class: "bar" }, h("i", { style: `width:${pct}%` })), h("span", { class: "small muted" }, `${n} of ${ls.length} lessons`))),
+      h("div", { class: "lessons" }, ls.map(lessonRow)));
   }
   const weekDone = () => { const since = L.startOfDay(now()) - 6 * L.DAY; return Object.values(S.lessons).filter(r => r.done && !r.skipped && (r.doneAt || r.u) >= since).length; };
   const myName = () => { try { return localStorage.getItem("cahier-name") || "Kailash"; } catch { return "Kailash"; } };
@@ -145,7 +162,7 @@
       h("div", { class: "actions" },
         btn(td.sessions ? "Start another session" : "Start session", () => startSession("full"), "primary"),
         btn(due ? `Quick review · ${due} due` : "Quick review", () => startSession("short"), "quiet")),
-      moduleBlock(),
+      moduleBlock(currentUnit()),
       installEvt ? btn("Install the app on this phone", doInstall, "quiet") : null,
       btn("Settings and backup", settings, "quiet"));
   }
@@ -168,11 +185,14 @@
   async function doInstall() { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; if (tab === "today" && !session) today(); }
 
   function course() {
-    const rows = [moduleBlock(), btn("Quick Check: skip this module if you know it", () => startSession("check"), "quiet")];
-    let n = 1;
-    C.levels.forEach(lv => rows.push(h("section", { class: "card" },
-      h("h3", {}, `${lv.id} · about ${lv.hours} hours`),
-      h("div", { class: "list" }, lv.units.map(u => { const m = n++; return m === 1 ? null : h("div", { class: "item" }, h("span", {}, `Module ${m} · ${u}`), status("later")); })))));
+    const rows = [];
+    UNITS().forEach(u => { rows.push(moduleBlock(u)); if (!unitDone(u)) rows.push(btn(`Quick Check: skip ${unitLabel(u).split(" · ")[1]} if you know it`, () => startSession("check", u), "quiet")); });
+    C.levels.forEach(lv => {
+      const coming = lv.units.map((t, i) => ({ t, n: i + 1 })).filter(x => !C.units[`${lv.id.toLowerCase()}-u${x.n}`]);
+      if (coming.length) rows.push(h("section", { class: "card" },
+        h("h3", {}, `${lv.id} · about ${lv.hours} hours`),
+        h("div", { class: "list" }, coming.map(x => h("div", { class: "item" }, h("span", {}, `Module ${x.n} · ${x.t}`), status("later"))))));
+    });
     show(h("h1", {}, "Course"), rows);
   }
 
@@ -282,7 +302,7 @@
     } else if (mode === "cards") review(50, 0);
     else if (mode === "mistakes") review(0, 50);
     else if (mode === "lesson") lessonSteps(lesson);
-    else if (mode === "check") { UNIT.quickCheck.forEach(id => steps.push({ t: "q", q: qById(id), check: true })); steps.push({ t: "checkEnd" }); }
+    else if (mode === "check") { lesson.quickCheck.forEach(id => steps.push({ t: "q", q: qById(id), check: true })); steps.push({ t: "checkEnd", u: lesson }); }
     session = { mode, steps, i: 0, right: 0, total: 0, start: now(), wrong: 0 };
     lastInput = now(); nav(); step();
   }
@@ -327,9 +347,9 @@
     save();
     show(header(), h("div", { class: "card ruled" }, h("h2", {}, passed ? "Lesson complete" : "Not quite yet"), h("p", {}, `${sc}% on ${scored} questions.${passed ? "" : " You need 80% to pass. Your mistakes are saved, so review them and try again."}`)), btn("Continue", next, "primary"));
   }
-  function stepCheckEnd() {
+  function stepCheckEnd(st) {
     const sc = Math.round(session.right / session.total * 100), pass = sc >= 80;
-    const skip = () => { lessons().forEach(l => { if (!(S.lessons[l.id] && S.lessons[l.id].done)) S.lessons[l.id] = { done: 1, skipped: 1, u: now() }; addCards(l.vocab, l.id); }); save(); next(); };
+    const skip = () => { st.u.lessons.forEach(l => { if (!(S.lessons[l.id] && S.lessons[l.id].done)) S.lessons[l.id] = { done: 1, skipped: 1, u: now() }; addCards(l.vocab, l.id); }); save(); next(); };
     show(h("div", { class: "card ruled" }, h("h2", {}, `Quick Check: ${sc}%`), h("p", {}, pass ? "You know this module well enough to skip it. Its words will still go into your flashcards." : "You need 80% to skip. Start with the lessons. They'll go faster now.")),
       pass ? btn("Skip this module", skip, "primary") : null, btn(pass ? "Do the lessons anyway" : "Back to today", next, pass ? "quiet" : "primary"));
   }
