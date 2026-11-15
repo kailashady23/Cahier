@@ -5,7 +5,7 @@
   const view = document.getElementById("view"), dock = document.getElementById("dock"), dot = document.getElementById("syncdot");
   const load = (k, f) => { try { return JSON.parse(localStorage.getItem(k)) || f; } catch { return f; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-  let S = L.merge(load(KEY, null), { start: Date.now() });
+  let S = L.merge(load(KEY, null) || window.CAHIER_DEMO || null, { start: Date.now() });
   let device = localStorage.getItem("cahier-device"); if (!device) { device = Math.random().toString(36).slice(2, 10); try { localStorage.setItem("cahier-device", device); } catch {} }
   let tab = "today", session = null, lastInput = Date.now(), installEvt = null;
   const save = () => { store(KEY, S); queueSync(); };
@@ -79,51 +79,100 @@
       return h("button", { type: "button", "aria-current": tab === id ? "page" : null, on: { click: () => go(id) } }, label, n ? h("span", { class: "badge" }, n) : null);
     }));
   }
-  function go(id) { tab = id; session = null; nav(); ({ today, course, words, mistakes, settings })[id](); }
+  function go(id) { tab = id; session = null; nav(); ({ today, course, words, mistakes, settings, progress })[id](); }
   document.getElementById("brand").addEventListener("click", () => { if (!session) go("today"); });
 
+  // Line icons. These strings are fixed in the code, never user text.
+  const ICONS = {
+    sound: '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>',
+    chat: '<path d="M4 5h16v11H10l-6 4z"/>',
+    people: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.9.4 5 2.8 5 5.8"/>',
+    equals: '<path d="M5 9h14M5 15h14"/>',
+    numbers: '<path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/>',
+    test: '<path d="M9 3h6v3H9z"/><path d="M7 4.5H5V21h14V4.5h-2"/><path d="m9 14 2 2 4-4"/>',
+    progress: '<circle cx="12" cy="12" r="8" stroke-dasharray="3.2 3.2"/>',
+    done: '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 10"/>',
+    review: '<path d="M12 4 21 20H3z"/><path d="M12 10v4M12 17h.01"/>',
+    retry: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
+    later: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>',
+    tick: '<path d="m6 12.5 4 4L18 8"/>'
+  };
+  function icon(name, cls) { const e = h("span", { class: "ico " + (cls || ""), "aria-hidden": "true" }); e.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + "</svg>"; return e; }
+  const STATUS = { progress: ["progress", "In progress"], done: ["done", "Done"], review: ["review", "Review"], retry: ["retry", "Retry"], later: ["later", "Coming"] };
+  const status = k => h("span", { class: "status s-" + k }, icon(STATUS[k][0]), STATUS[k][1]);
+  function ring(pct) {
+    const e = h("span", { class: "ring", role: "img", "aria-label": pct + "% done" }), c = 2 * Math.PI * 18;
+    e.innerHTML = `<svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" class="track"/><circle cx="22" cy="22" r="18" class="fillring" stroke-dasharray="${(pct / 100 * c).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 22 22)"/></svg>`;
+    e.append(h("b", {}, pct + "%")); return e;
+  }
+  const hasMistakes = l => liveMistakes().some(m => { const q = qById(m.qid); return q && q.lesson === l.id; });
+  function lessonState(l) {
+    const r = S.lessons[l.id] || {};
+    if (r.done) return { pct: 100, st: hasMistakes(l) ? "review" : "done", done: true };
+    if (r.failed) return { pct: r.pct || 0, st: "retry" };
+    if (r.pct) return { pct: r.pct, st: "progress" };
+    return { pct: 0, st: null };
+  }
+  function lessonRow(l) {
+    const k = lessonState(l), isNext = nextLesson() === l;
+    return h("button", { type: "button", class: "lesson" + (isNext ? " next" : ""), on: { click: () => startSession("lesson", l) } },
+      h("span", { class: "lico" + (k.done ? " is-done" : "") }, icon(l.icon || "chat"), k.done ? icon("tick", "tickbadge") : null),
+      h("span", { class: "ltext" }, h("b", {}, l.title), h("span", { class: "desc" }, l.desc || ""), k.st ? status(k.st) : h("span", { class: "desc mins" }, isNext ? `Up next · ${l.minutes} min` : `${l.minutes} min`)),
+      ring(k.pct));
+  }
+  function moduleBlock() {
+    const n = lessons().filter(l => S.lessons[l.id] && S.lessons[l.id].done).length, pct = Math.round(n / lessons().length * 100);
+    return h("section", { class: "module" },
+      h("div", { class: "mhead" }, h("div", {}, h("span", { class: "eyebrow" }, "A1 · Module 1"), h("h2", {}, UNIT.title)),
+        h("div", { class: "mbar" }, h("div", { class: "bar" }, h("i", { style: `width:${pct}%` })), h("span", { class: "small muted" }, `${n} of ${lessons().length} lessons`))),
+      h("div", { class: "lessons" }, lessons().map(lessonRow)));
+  }
+  const weekDone = () => { const since = L.startOfDay(now()) - 6 * L.DAY; return Object.values(S.lessons).filter(r => r.done && !r.skipped && (r.doneAt || r.u) >= since).length; };
+  const myName = () => { try { return localStorage.getItem("cahier-name") || "Kailash"; } catch { return "Kailash"; } };
   function today() {
+    const td = L.dayTotals(S)[L.ymd(now())] || { sec: 0, sessions: 0 }, wk = weekDone(), due = dueCount();
+    const tile = (n, label, fn) => h("button", { type: "button", class: "tile", on: { click: fn } }, h("b", {}, n), h("span", {}, label));
+    show(
+      h("section", { class: "hero" },
+        h("div", { class: "hello" },
+          h("h1", {}, "Salut, " + myName()),
+          h("p", {}, wk ? `You've completed ${wk} ${wk > 1 ? "lessons" : "lesson"} this week.` : "Your first lesson this week is ready."),
+          h("button", { type: "button", class: "pill", on: { click: () => go("progress") } }, "View progress")),
+        h("div", { class: "tiles" },
+          tile(dueCards().length, "Words due", () => go("words")),
+          tile(liveMistakes().length, "Mistakes to fix", () => go("mistakes")),
+          tile(Math.round(td.sec / 60), "Minutes today", () => go("progress")))),
+      h("div", { class: "actions" },
+        btn(td.sessions ? "Start another session" : "Start session", () => startSession("full"), "primary"),
+        btn(due ? `Quick review · ${due} due` : "Quick review", () => startSession("short"), "quiet")),
+      moduleBlock(),
+      installEvt ? btn("Install the app on this phone", doInstall, "quiet") : null,
+      btn("Settings and backup", settings, "quiet"));
+  }
+  function progress() {
+    tab = "progress"; nav();
     const t = L.dayTotals(S), td = t[L.ymd(now())] || { sec: 0, sessions: 0 }, p = L.pace(S, C.totalHours, now());
-    const nx = nextLesson(), due = dueCount(), mins = Math.round(td.sec / 60);
     const fin = new Date(p.finish).toLocaleDateString("en-CA", { month: "long", year: "numeric" });
     const strip = h("div", { class: "strip", "aria-label": "Last 14 days" }, Array.from({ length: 14 }, (_, i) => {
       const d = t[L.ymd(now() - (13 - i) * L.DAY)], sec = d ? d.sec : 0;
       return h("i", { "data-n": sec >= 1800 ? 2 : sec > 0 ? 1 : 0, class: i === 13 ? "now" : "" });
     }));
-    show(
-      h("div", { class: "card ruled" },
-        h("h1", {}, td.sessions ? "Encore une fois ?" : "Aujourd'hui"),
-        h("p", { class: "muted" }, td.sessions ? `You've done ${td.sessions} ${td.sessions > 1 ? "sessions" : "session"} today. Go again if you have time.` : "Your next step is ready."),
-        h("div", {}, nx ? h("span", { class: "chip" }, `A1 Unit 1 · Lesson ${lessons().indexOf(nx) + 1} of ${lessons().length}`) : h("span", { class: "chip" }, "A1 Unit 1 complete")),
-        h("h2", {}, nx ? nx.title : "Practice and review")),
-      btn(td.sessions ? "Start another session" : "Start session", () => startSession("full"), "primary"),
-      btn(due ? `Quick review · ${due} due` : "Quick review", () => startSession("short"), "quiet"),
+    show(h("h1", {}, "Progress"),
       h("div", { class: "card" },
-        h("div", { class: "stats" }, stat(mins, "min today"), stat(p.hours.toFixed(1), `of ${C.totalHours} h`), stat(td.sessions, "sessions today")),
+        h("div", { class: "stats" }, stat(weekDone(), "lessons this week"), stat(p.hours.toFixed(1), `of ${C.totalHours} h`), stat(td.sessions, "sessions today")),
         h("div", { class: "bar" }, h("i", { style: `width:${Math.min(100, p.hours / C.totalHours * 100)}%` })),
         h("p", { class: "small muted" }, p.measured ? `At your recent pace, you'd finish B2 around ${fin}.` : `At 1 hour a day, you'd finish B2 around ${fin}. This updates after 3 study days.`)),
-      h("div", { class: "card" }, h("h3", {}, "Last 14 days"), strip, h("p", { class: "small muted" }, "Missed days don't count against you. The plan moves with you.")),
-      installEvt ? btn("Install the app on this phone", doInstall, "quiet") : null,
-      btn("Settings and backup", settings, "quiet"));
+      h("div", { class: "card" }, h("h3", {}, "Last 14 days"), strip, h("p", { class: "small muted" }, "Missed days don't count against you. The plan moves with you.")));
   }
   const stat = (v, l) => h("div", { class: "stat" }, h("b", {}, v), h("span", {}, l));
   async function doInstall() { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; if (tab === "today" && !session) today(); }
 
   function course() {
-    const rows = [];
-    let ready = lessons().filter(l => S.lessons[l.id] && S.lessons[l.id].done).length;
-    rows.push(h("div", { class: "card" },
-      h("div", {}, h("span", { class: "chip" }, "A1 · Unit 1")), h("h2", {}, UNIT.title),
-      h("div", { class: "bar" }, h("i", { style: `width:${ready / lessons().length * 100}%` })),
-      btn("Quick Check: skip if you know this", () => startSession("check"), "quiet"),
-      h("div", { class: "list" }, lessons().map(l => {
-        const r = S.lessons[l.id], isNext = nextLesson() === l;
-        return h("button", { type: "button", class: "item", on: { click: () => startSession("lesson", l) } },
-          h("span", {}, l.title), h("span", { class: "tag " + (r && r.done ? "done" : isNext ? "next" : "") }, r && r.done ? (r.skipped ? "Skipped" : r.score != null ? r.score + "%" : "Done") : isNext ? "Next" : l.minutes + " min"));
-      }))));
-    C.levels.forEach(lv => rows.push(h("div", { class: "card" },
+    const rows = [moduleBlock(), btn("Quick Check: skip this module if you know it", () => startSession("check"), "quiet")];
+    let n = 1;
+    C.levels.forEach(lv => rows.push(h("section", { class: "card" },
       h("h3", {}, `${lv.id} · about ${lv.hours} hours`),
-      h("div", { class: "list" }, lv.units.map((u, i) => (lv.id === "A1" && i === 0) ? null : h("div", { class: "item" }, h("span", {}, `${i + 1}. ${u}`), h("span", { class: "tag" }, "Coming")))))));
+      h("div", { class: "list" }, lv.units.map(u => { const m = n++; return m === 1 ? null : h("div", { class: "item" }, h("span", {}, `Module ${m} · ${u}`), status("later")); })))));
     show(h("h1", {}, "Course"), rows);
   }
 
@@ -158,6 +207,7 @@
         a ? [h("p", { class: "small" }, "Signed in as " + a.email), btn("Sync now", () => sync(true).then(() => settings()), "quiet"), btn("Sign out", () => { localStorage.removeItem(AUTH); settings(); setDot("Saved on this device"); }, "quiet")] :
         h("form", { class: "card", style: "border:0;padding:0", on: { submit: e => e.preventDefault() } }, h("label", {}, "Email", email), h("label", {}, "Password (at least 6 characters)", pass),
           h("div", { class: "row" }, btn("Sign in", () => auth("token?grant_type=password", email.value, pass.value, msg), "primary"), btn("Create account", () => auth("signup", email.value, pass.value, msg))))),
+      h("div", { class: "card" }, h("label", {}, "Your name on the home screen", h("input", { type: "text", id: "s-name", value: myName(), autocomplete: "given-name", on: { change: e => { try { localStorage.setItem("cahier-name", e.target.value.trim() || "Kailash"); } catch {} } } }))),
       h("div", { class: "card" }, h("h3", {}, "Voice speed"), h("div", { class: "row" }, SPEEDS.map(([label], i) => h("button", { type: "button", class: "btn " + (i === speed ? "primary" : "quiet"), "aria-pressed": i === speed ? "true" : "false", on: { click: () => { setSpeed(i); say("Bonjour, je m'appelle Paul."); settings(); } } }, label)))),
       h("div", { class: "card" }, h("h3", {}, "Backup"), h("p", { class: "small muted" }, "Save a copy of all your progress as a file."),
         btn("Export backup", () => { const u = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: "application/json" })); const l = h("a", { href: u, download: `cahier-backup-${L.ymd(now())}.json` }); l.click(); URL.revokeObjectURL(u); }, "quiet"),
@@ -190,7 +240,7 @@
   function queueSync() { clearTimeout(syncT); syncT = setTimeout(() => sync(), 3000); }
   async function sync(loud) {
     let a = load(AUTH, null);
-    if (!a || !CFG.supabaseUrl) { setDot("Saved on this device"); return; }
+    if (!a || !CFG.supabaseUrl) { setDot(window.CAHIER_DEMO ? "Preview · example progress" : "Saved on this device"); return; }
     if (syncing) return; syncing = true;
     try {
       a = await fresh(a);
@@ -202,7 +252,7 @@
       const w = await fetch(url + "?on_conflict=user_id", { method: "POST", headers: { ...authHead(a), Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ user_id: a.uid, data: S, updated_at: new Date().toISOString() }) });
       if (!w.ok) throw new Error("write");
       setDot("Synced"); nav();
-      if (!session && tab !== "settings" && !loud && !view.contains(document.activeElement)) ({ today, course, words, mistakes })[tab]();
+      if (!session && tab !== "settings" && !loud && !view.contains(document.activeElement)) ({ today, course, words, mistakes, progress })[tab]();
     } catch (e) { setDot(e.message === "signin" ? "Sign in again to sync" : "Will sync when online"); }
     syncing = false;
   }
@@ -215,10 +265,12 @@
     const steps = [], mix = a => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
     const review = (cn, mn) => { dueCards().slice(0, cn).forEach(c => steps.push({ t: "card", c })); dueMistakes().slice(0, mn).forEach(m => steps.push({ t: "q", q: qById(m.qid), review: m })); };
     const lessonSteps = l => {
-      l.teach.forEach((b, i) => steps.push({ t: "teach", b, l, i }));
-      if (l.vocab.length) steps.push({ t: "vocab", l });
-      l.questions.forEach(q => steps.push({ t: "q", q, l }));
-      steps.push({ t: "lessonEnd", l });
+      const st = [];
+      l.teach.forEach((b, i) => st.push({ t: "teach", b, l, i }));
+      if (l.vocab.length) st.push({ t: "vocab", l });
+      l.questions.forEach(q => st.push({ t: "q", q, l }));
+      st.push({ t: "lessonEnd", l });
+      st.forEach((x, k) => { x.k = k; x.n = st.length; }); steps.push(...st);
     };
     if (mode === "full") {
       review(15, 10); const l = nextLesson();
@@ -248,6 +300,8 @@
   function step() {
     const s = session.steps[session.i];
     if (!s) return endSession(true);
+    // Remember how far into a lesson you got, for its progress ring.
+    if (s.l && s.n && s.t !== "lessonEnd") { const r = S.lessons[s.l.id] || {}, pct = Math.round(s.k / s.n * 100); if (!r.done && pct > (r.pct || 0)) { S.lessons[s.l.id] = { ...r, pct, u: now() }; store(KEY, S); } }
     ({ teach: stepTeach, vocab: stepVocab, q: stepQ, card: stepCard, lessonEnd: stepLessonEnd, checkEnd: stepCheckEnd, skill: stepSkill })[s.t](s);
   }
   function endSession(finished) {
@@ -268,14 +322,16 @@
   function stepLessonEnd(s) {
     const scored = s.l.questions.length, sc = session.lessonTotal ? Math.round(session.lessonRight / session.lessonTotal * 100) : 0;
     const passed = !s.l.isTest || sc >= 80;
-    if (passed) { S.lessons[s.l.id] = { done: 1, score: sc, u: now() }; save(); }
+    const old = S.lessons[s.l.id] || {};
+    S.lessons[s.l.id] = passed ? { done: 1, score: sc, doneAt: (old.done && old.doneAt) || now(), u: now() } : { ...old, failed: 1, pct: Math.max(old.pct || 0, 90), u: now() };
+    save();
     show(header(), h("div", { class: "card ruled" }, h("h2", {}, passed ? "Lesson complete" : "Not quite yet"), h("p", {}, `${sc}% on ${scored} questions.${passed ? "" : " You need 80% to pass. Your mistakes are saved, so review them and try again."}`)), btn("Continue", next, "primary"));
   }
   function stepCheckEnd() {
     const sc = Math.round(session.right / session.total * 100), pass = sc >= 80;
     const skip = () => { lessons().forEach(l => { if (!(S.lessons[l.id] && S.lessons[l.id].done)) S.lessons[l.id] = { done: 1, skipped: 1, u: now() }; addCards(l.vocab, l.id); }); save(); next(); };
-    show(h("div", { class: "card ruled" }, h("h2", {}, `Quick Check: ${sc}%`), h("p", {}, pass ? "You know this unit well enough to skip it. Its words will still go into your flashcards." : "You need 80% to skip. Start with the lessons. They'll go faster now.")),
-      pass ? btn("Skip this unit", skip, "primary") : null, btn(pass ? "Do the lessons anyway" : "Back to today", next, pass ? "quiet" : "primary"));
+    show(h("div", { class: "card ruled" }, h("h2", {}, `Quick Check: ${sc}%`), h("p", {}, pass ? "You know this module well enough to skip it. Its words will still go into your flashcards." : "You need 80% to skip. Start with the lessons. They'll go faster now.")),
+      pass ? btn("Skip this module", skip, "primary") : null, btn(pass ? "Do the lessons anyway" : "Back to today", next, pass ? "quiet" : "primary"));
   }
   function stepSkill() {
     const k = C.skills[S.skillN % C.skills.length], ta = k.writing ? h("textarea", { id: "skill-text", rows: 5, lang: "fr", "aria-label": "Your writing" }) : null;

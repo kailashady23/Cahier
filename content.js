@@ -14,7 +14,7 @@ window.COURSE = {
       quickCheck: ["q-l2-3", "q-l2-6", "q-l3-2", "q-l3-5", "q-l4-1", "q-l4-3", "q-l4-6", "q-l5-3", "q-l5-5", "q-l1-3"],
       lessons: [
         {
-          id: "l1", title: "French sounds and the alphabet", minutes: 25,
+          id: "l1", icon: "sound", desc: "Silent letters, key sounds, and the alphabet", title: "French sounds and the alphabet", minutes: 25,
           teach: [
             { h: "Many final letters are silent", p: "French often skips the last consonant of a word. Say what you hear, not everything you see.", ex: [["Paris", "Paris (no s sound)"], ["petit", "small (no t sound)"], ["vous", "you (no s sound)"], ["parle", "speak (final e is silent)"]] },
             { h: "Sounds to learn first", p: "Two pairs matter early. The sound ou is like the vowel in \"food\". The sound u has no English match: say \"ee\" with rounded lips. Also, é sounds like the \"ay\" in \"day\", and è sounds like the \"e\" in \"bed\".", ex: [["vous", "you"], ["tu", "you (informal)"], ["café", "coffee"], ["mère", "mother"]] },
@@ -31,7 +31,7 @@ window.COURSE = {
           ]
         },
         {
-          id: "l2", title: "Greetings and introducing yourself", minutes: 25,
+          id: "l2", icon: "chat", desc: "Hello, goodbye, and saying your name", title: "Greetings and introducing yourself", minutes: 25,
           teach: [
             { h: "Saying hello and goodbye", p: "Bonjour works all day. Bonsoir is for the evening. Salut is informal and works for both hello and bye. In Quebec, you will also hear allô as a casual hello.", ex: [["Bonjour !", "Hello"], ["Bonsoir !", "Good evening"], ["Salut !", "Hi / Bye"], ["Au revoir !", "Goodbye"], ["À bientôt !", "See you soon"]] },
             { h: "Your name", p: "Je m'appelle means \"my name is\". Literally, it means \"I call myself\".", ex: [["Je m'appelle Paul.", "My name is Kailash."], ["Comment tu t'appelles ?", "What's your name? (informal)"], ["Comment vous appelez-vous ?", "What's your name? (formal)"], ["Enchanté.", "Nice to meet you. (a man says this)"], ["Enchantée.", "Nice to meet you. (a woman writes this, it sounds the same)"]] },
@@ -50,7 +50,7 @@ window.COURSE = {
           ]
         },
         {
-          id: "l3", title: "Je, tu, vous: who is who", minutes: 25,
+          id: "l3", icon: "people", desc: "Je, tu, vous, and when to use each", title: "Je, tu, vous: who is who", minutes: 25,
           teach: [
             { h: "The subject pronouns", p: "These words say who does the action. Je becomes j' before a vowel sound.", ex: [["je", "I"], ["tu", "you (one person, informal)"], ["il", "he / it"], ["elle", "she / it"], ["on", "we / people (very common when speaking)"], ["nous", "we"], ["vous", "you (formal, or more than one person)"], ["ils", "they (men or mixed group)"], ["elles", "they (only women)"]] },
             { h: "Tu or vous?", p: "Use tu with friends, family, and children. Use vous with strangers, customers, your boss at first, and any group. Quebec uses tu more quickly than France does, but start with vous when you aren't sure.", ex: [["Tu vas bien ?", "Are you well? (to a friend)"], ["Vous allez bien ?", "Are you well? (polite, or to a group)"]] },
@@ -68,7 +68,7 @@ window.COURSE = {
           ]
         },
         {
-          id: "l4", title: "Être: to be", minutes: 25,
+          id: "l4", icon: "equals", desc: "Je suis, tu es, and saying what you are not", title: "Être: to be", minutes: 25,
           teach: [
             { h: "The verb être", p: "Être means \"to be\". It is irregular, so you learn each form by heart. Je suis is the first one to memorize.", ex: [["je suis", "I am"], ["tu es", "you are"], ["il / elle / on est", "he / she / one is"], ["nous sommes", "we are"], ["vous êtes", "you are"], ["ils / elles sont", "they are"]] },
             { h: "Jobs and nationalities", p: "With jobs, French doesn't use a word for \"a\". Say Je suis machiniste, not Je suis un machiniste. Many job and nationality words change for women.", ex: [["Je suis machiniste.", "I'm a machinist."], ["Il est canadien.", "He is Canadian."], ["Elle est canadienne.", "She is Canadian."]] },
@@ -87,7 +87,7 @@ window.COURSE = {
           ]
         },
         {
-          id: "l5", title: "Numbers 0 to 20", minutes: 25,
+          id: "l5", icon: "numbers", desc: "Zéro to vingt, plus il y a", title: "Numbers 0 to 20", minutes: 25,
           teach: [
             { h: "Zero to ten", p: "Say each one out loud. In six and dix, the x sounds like an s when the number stands alone.", ex: [["zéro", "0"], ["un", "1"], ["deux", "2"], ["trois", "3"], ["quatre", "4"], ["cinq", "5"], ["six", "6"], ["sept", "7"], ["huit", "8"], ["neuf", "9"], ["dix", "10"]] },
             { h: "Eleven to twenty", p: "Dix-sept, dix-huit, and dix-neuf are built from ten plus a number, joined by a hyphen.", ex: [["onze", "11"], ["douze", "12"], ["treize", "13"], ["quatorze", "14"], ["quinze", "15"], ["seize", "16"], ["dix-sept", "17"], ["dix-huit", "18"], ["dix-neuf", "19"], ["vingt", "20"]] },
@@ -105,7 +105,7 @@ window.COURSE = {
           ]
         },
         {
-          id: "l6", title: "Unit test", minutes: 25, isTest: true,
+          id: "l6", icon: "test", desc: "Mixed questions from all five lessons", title: "Unit test", minutes: 25, isTest: true,
           teach: [
             { h: "Show what you know", p: "This test mixes all five lessons. You pass with 80%. Wrong answers go to your mistake book, so a low score still helps you." }
           ],
