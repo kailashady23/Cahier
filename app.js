@@ -220,13 +220,24 @@
     tab = "settings"; nav();
     const a = load(AUTH, null), configured = CFG.supabaseUrl && CFG.supabaseKey, msg = h("p", { class: "small muted", role: "status" });
     const email = h("input", { type: "email", id: "s-email", autocomplete: "email" }), pass = h("input", { type: "password", id: "s-pass", autocomplete: "current-password" });
+    // Sign-in messages appear right under the buttons.
+    const amsg = h("p", { class: "authmsg", role: "status", "aria-live": "polite" });
+    async function tryAuth(e, path) {
+      const em = email.value.trim(), pw = pass.value;
+      if (!/^\S+@\S+\.\S+$/.test(em)) { amsg.textContent = "Enter your email address."; return email.focus(); }
+      if (pw.length < 6) { amsg.textContent = "Enter a password with at least 6 characters."; return pass.focus(); }
+      const me = e.currentTarget, bs = me.parentElement.querySelectorAll("button"), label = me.textContent;
+      bs.forEach(b => b.disabled = true); me.textContent = path === "signup" ? "Creating account…" : "Signing in…";
+      await auth(path, em, pw, amsg);
+      bs.forEach(b => b.disabled = false); me.textContent = label;
+    }
     const file = h("input", { type: "file", accept: "application/json", hidden: true, on: { change: async e => { try { S = L.merge(S, JSON.parse(await e.target.files[0].text())); save(); msg.textContent = "Backup restored and combined with your progress."; } catch { msg.textContent = "That file isn't a Cahier backup. Choose the .json file you exported."; } } } });
     show(h("h1", {}, "Settings"),
       h("div", { class: "card" }, h("h3", {}, "Cloud sync"),
         !configured ? h("p", { class: "small muted" }, "Not set up yet. Your progress is saved on this device.") :
         a ? [h("p", { class: "small" }, "Signed in as " + a.email), btn("Sync now", () => sync(true).then(() => settings()), "quiet"), btn("Sign out", () => { localStorage.removeItem(AUTH); settings(); setDot("Saved on this device"); }, "quiet")] :
-        h("form", { class: "card", style: "border:0;padding:0", on: { submit: e => e.preventDefault() } }, h("label", {}, "Email", email), h("label", {}, "Password (at least 6 characters)", pass),
-          h("div", { class: "row" }, btn("Sign in", () => auth("token?grant_type=password", email.value, pass.value, msg), "primary"), btn("Create account", () => auth("signup", email.value, pass.value, msg))))),
+        h("form", { class: "card", style: "padding:0", on: { submit: e => e.preventDefault() } }, h("label", {}, "Email", email), h("label", {}, "Password (at least 6 characters)", pass),
+          h("div", { class: "row" }, btn("Sign in", e => tryAuth(e, "token?grant_type=password"), "primary"), btn("Create account", e => tryAuth(e, "signup"))), amsg)),
       h("div", { class: "card" }, h("label", {}, "Your name on the home screen", h("input", { type: "text", id: "s-name", value: myName(), autocomplete: "given-name", on: { change: e => { try { localStorage.setItem("cahier-name", e.target.value.trim() || "Kailash"); } catch {} } } }))),
       h("div", { class: "card" }, h("h3", {}, "Voice speed"), h("div", { class: "row" }, SPEEDS.map(([label], i) => h("button", { type: "button", class: "btn " + (i === speed ? "primary" : "quiet"), "aria-pressed": i === speed ? "true" : "false", on: { click: () => { setSpeed(i); say("Bonjour, je m'appelle Paul."); settings(); } } }, label)))),
       h("div", { class: "card" }, h("h3", {}, "Backup"), h("p", { class: "small muted" }, "Save a copy of all your progress as a file."),
@@ -240,7 +251,7 @@
   const authHead = a => ({ apikey: CFG.supabaseKey, Authorization: "Bearer " + a.access, "Content-Type": "application/json" });
   async function auth(path, em, pw, msg) {
     try {
-      msg.textContent = "One moment…";
+      msg.textContent = "Connecting…";
       const r = await fetch(`${CFG.supabaseUrl}/auth/v1/${path}`, { method: "POST", headers: { apikey: CFG.supabaseKey, "Content-Type": "application/json" }, body: JSON.stringify({ email: em.trim(), password: pw }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {

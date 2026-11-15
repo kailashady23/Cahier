@@ -124,3 +124,6 @@ label{display:grid;gap:4px;font-size:15px;color:var(--muted)}
 .flash .fr{font:32px var(--display);color:var(--accent);overflow-wrap:anywhere}
 .note{padding:10px 12px;border-radius:12px;background:var(--sunk);font-size:15px}
 @media (prefers-reduced-motion:no-preference){.fb{animation:rise .16s ease-out}@keyframes rise{from{transform:translateY(4px)}to{transform:none}}}
+.authmsg{font-size:15px;color:var(--text);min-height:1.5em}
+.authmsg:empty{min-height:0}
+.card .btn.quiet{background:var(--sunk)}
