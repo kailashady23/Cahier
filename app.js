@@ -76,6 +76,30 @@
     if (session && !document.hidden && now() - lastInput < 12e4) { const r = dayRec(); r.sec += 5; r.u = now(); store(KEY, S); }
   }, 5000);
 
+  // ---------- Points ----------
+  function award(pts, kind) {
+    if (!pts) return;
+    const k = L.ymd(now()) + "|" + device, r = S.xp[k] || (S.xp[k] = { pts: 0, u: now() });
+    r.pts += pts; r[kind] = (r[kind] || 0) + pts; r.u = now();
+    if (session) session.xp = (session.xp || 0) + pts;
+    store(KEY, S); checkLevel();
+  }
+  const toastEl = h("div", { class: "toast", role: "status", "aria-live": "polite", hidden: true }); document.body.append(toastEl);
+  let toastT = 0;
+  function toast(big, small) { toastEl.replaceChildren(h("b", {}, big), small ? h("span", {}, small) : null); toastEl.hidden = false; toastEl.classList.remove("pop"); void toastEl.offsetWidth; toastEl.classList.add("pop"); clearTimeout(toastT); toastT = setTimeout(() => { toastEl.hidden = true; }, 3200); }
+  function checkLevel() {
+    const lv = L.levelInfo(L.xpTotal(S)); let seen = 1;
+    try { seen = Number(localStorage.getItem("cahier-level")) || 0; } catch {}
+    if (!seen) { try { localStorage.setItem("cahier-level", lv.level); } catch {} return; }
+    if (lv.level > seen) { try { localStorage.setItem("cahier-level", lv.level); } catch {} toast(`Niveau ${lv.level} !`, `You're now ${lv.name}.`); }
+  }
+  function levelBar(compact) {
+    const lv = L.levelInfo(L.xpTotal(S));
+    return h("button", { type: "button", class: "levelbar" + (compact ? " compact" : ""), on: { click: () => go("scores") }, "aria-label": `Level ${lv.level}, ${lv.name}. Open scoreboard.` },
+      h("span", { class: "lvtop" }, h("b", {}, `Niveau ${lv.level}`), h("span", {}, lv.name), h("span", { class: "pts" }, `${lv.into} / ${lv.need} pts`)),
+      h("span", { class: "bar" }, h("i", { style: `width:${Math.round(lv.into / lv.need * 100)}%` })));
+  }
+
   // ---------- Tabs ----------
   const TABS = [["today", "Today"], ["course", "Course"], ["quizzes", "Quizzes"], ["words", "Words"], ["mistakes", "Mistakes"]];
   function nav() {
@@ -85,7 +109,7 @@
       return h("button", { type: "button", "aria-current": tab === id ? "page" : null, on: { click: () => go(id) } }, label, n ? h("span", { class: "badge" }, n) : null);
     }));
   }
-  function go(id) { tab = id; session = null; nav(); ({ today, course, quizzes, words, mistakes, settings, progress })[id](); }
+  function go(id) { tab = id; session = null; nav(); ({ today, course, quizzes, words, mistakes, settings, progress, scores })[id](); }
   document.getElementById("brand").addEventListener("click", () => { if (!session) go("today"); });
 
   // Line icons. These strings are fixed in the code, never user text.
@@ -154,7 +178,8 @@
         h("div", { class: "hello" },
           h("h1", {}, "Salut, " + myName()),
           h("p", {}, wk ? `You've completed ${wk} ${wk > 1 ? "lessons" : "lesson"} this week.` : "Your first lesson this week is ready."),
-          h("button", { type: "button", class: "pill", on: { click: () => go("progress") } }, "View progress")),
+          levelBar(),
+          h("div", { class: "pills" }, h("button", { type: "button", class: "pill", on: { click: () => go("scores") } }, "Scoreboard"), h("button", { type: "button", class: "pill", on: { click: () => go("progress") } }, "View progress"))),
         h("div", { class: "tiles" },
           tile(dueCards().length, "Words due", () => go("words")),
           tile(liveMistakes().length, "Mistakes to fix", () => go("mistakes")),
@@ -202,6 +227,7 @@
   const quizPdf = (u, set) => { const m = /^([a-z]\d)-u(\d+)$/i.exec(u.id); return `quizzes/Cahier-${m[1].toUpperCase()}-Module-${m[2]}-${set.name.replace(" ", "-")}.pdf`; };
   function quizzes() {
     show(h("h1", {}, "Quizzes"),
+      speedCard(),
       h("p", { class: "muted" }, "Three quizzes for each module. Answer every question on one page, then submit. 80% or more is a pass."),
       UNITS().map(u => h("section", { class: "card" },
         h("div", {}, h("span", { class: "eyebrow" }, unitLabel(u)), h("h2", {}, u.title)),
@@ -215,6 +241,96 @@
               h("a", { class: "btn quiet", href: quizPdf(u, set), download: quizPdf(u, set).split("/")[1] }, "PDF")));
         })))));
   }
+  // ---------- Speed rounds ----------
+  const MODES = {
+    verbs: { name: "Verb sprint", desc: "Pick the right verb form", make: r => L.verbQuestion(C.verbs, r) },
+    words: { name: "Word sprint", desc: "Pick the meaning", make: r => L.wordQuestion(vocabPool(), r) },
+    numbers: { name: "Number sprint", desc: "Zéro to vingt", make: r => L.numberQuestion(C.numbers, r) }
+  };
+  const vocabPool = () => { const seen = new Set(); return UNITS().flatMap(u => u.lessons.flatMap(l => l.vocab)).filter(([fr, en]) => !seen.has(en) && seen.add(en)); };
+  function speedCard() {
+    return h("section", { class: "card speedcard" },
+      h("div", {}, h("span", { class: "eyebrow" }, "60 seconds"), h("h2", {}, "Speed rounds")),
+      h("p", { class: "small muted" }, "Answer as many as you can. 3 right in a row doubles your points, 6 triples them."),
+      h("div", { class: "speedgrid" }, Object.entries(MODES).map(([k, m]) => { const r = S.speed[k];
+        return h("button", { type: "button", class: "speedbtn", on: { click: () => speedRound(k) } }, h("b", {}, m.name), h("span", {}, m.desc), h("span", { class: "hs" }, r ? `High score ${r.best}` : "No score yet")); })));
+  }
+  function speedRound(mode) {
+    const M = MODES[mode], r = L.seeded(String(now())), LEN = 60000;
+    const me = session = { mode: "speed", steps: [], i: 0, right: 0, total: 0, wrong: 0, start: now() }; tab = "quizzes"; lastInput = now(); nav();
+    let score = 0, combo = 0, bestCombo = 0, ends = 0, busy = false, q = null; const missed = [];
+    const timeEl = h("b", { class: "sclock" }, "60"), scoreEl = h("b", {}, "0"), comboEl = h("span", { class: "combo" }), card = h("div", { class: "speedq" });
+    const ring = h("div", { class: "sring" }, h("i", { style: "width:100%" }));
+    const start = () => {
+      show(h("div", { class: "progress" }, h("span", { class: "eyebrow", style: "flex:1" }, M.name), speedBtn(), h("button", { type: "button", class: "close", on: { click: () => go("quizzes") } }, "Exit")),
+        h("div", { class: "scorebar" }, h("div", {}, timeEl, h("span", {}, "seconds")), h("div", {}, scoreEl, h("span", {}, "points")), comboEl), ring, card);
+      ends = now() + LEN; ask();
+      const t = setInterval(() => {
+        if (session !== me) return clearInterval(t);
+        lastInput = now();
+        const left = Math.max(0, ends - now()); timeEl.textContent = Math.ceil(left / 1000); ring.firstChild.style.width = (left / LEN * 100) + "%";
+        timeEl.classList.toggle("low", left < 10000);
+        if (!left) { clearInterval(t); finish(); }
+      }, 100);
+    };
+    function ask() {
+      q = M.make(r);
+      card.replaceChildren(h("p", { class: "ssub" }, q.sub), h("p", { class: "sprompt", lang: "fr" }, q.prompt),
+        h("div", { class: "sopts" }, q.options.map(o => h("button", { type: "button", class: "sopt", lang: mode === "words" ? "en" : "fr", on: { click: e => answer(o, e.currentTarget) } }, o))));
+      if (q.say && mode === "numbers") say(q.say);
+    }
+    function answer(o, b) {
+      if (busy || session !== me) return; busy = true; me.total++;
+      const ok = o === q.answer;
+      if (ok) { combo++; bestCombo = Math.max(bestCombo, combo); score += 10 * L.comboMult(combo); me.right++; b.classList.add("right"); }
+      else { combo = 0; missed.push(q.full); b.classList.add("wrong"); card.querySelectorAll(".sopt").forEach(x => { if (x.textContent === q.answer) x.classList.add("right"); }); }
+      scoreEl.textContent = score; const m = L.comboMult(combo);
+      comboEl.replaceChildren(...(combo >= 2 ? [h("b", {}, `×${m}`), h("span", {}, `${combo} in a row`)] : []));
+      comboEl.classList.toggle("hot", m > 1);
+      setTimeout(() => { busy = false; if (session === me && ends > now()) ask(); }, ok ? 220 : 900);
+    }
+    function finish() {
+      const old = S.speed[mode] || { best: 0, plays: 0 }, isBest = score > (old.best || 0);
+      S.speed[mode] = { best: Math.max(old.best || 0, score), plays: (old.plays || 0) + 1, last: score, u: now() };
+      const gained = me.right * 3 + (isBest && old.plays ? 25 : 0); award(gained, "speed"); save();
+      session = null; nav();
+      show(h("section", { class: "hero speedend" },
+        h("div", { class: "hello" }, h("span", { class: "eyebrow" }, M.name), h("h1", {}, isBest && old.plays ? "New high score!" : isBest ? "First score!" : "Time's up!"),
+          h("p", {}, `${me.right} right out of ${me.total} · best run ${bestCombo} in a row`), h("p", { class: "best" }, `+${gained} points`)),
+        h("div", { class: "bigscore" + (isBest ? " gold" : "") }, h("b", {}, score), h("span", {}, isBest ? "high score" : `high score ${old.best}`))),
+        missed.length ? h("section", { class: "card" }, h("h3", {}, "Review these"), h("div", { class: "list" }, [...new Set(missed)].slice(0, 10).map(t => h("button", { type: "button", class: "item", lang: "fr", on: { click: () => say(t.split(" = ")[0]) } }, h("span", {}, t), h("span", { class: "tag" }, "▶"))))) : null,
+        h("div", { class: "actions" }, btn("Play again", () => speedRound(mode), "primary"), btn("Back to quizzes", () => go("quizzes"), "quiet")));
+    }
+    // A short countdown so you're ready when the clock starts.
+    let n = 3; const cd = h("div", { class: "countdown" }, h("b", {}, "3"), h("span", {}, M.name));
+    show(cd); const ci = setInterval(() => { if (session !== me) return clearInterval(ci); n--; if (n > 0) { cd.firstChild.textContent = n; cd.firstChild.classList.remove("tick"); void cd.offsetWidth; cd.firstChild.classList.add("tick"); } else { clearInterval(ci); start(); } }, 800);
+  }
+
+  // ---------- Scoreboard ----------
+  function scores() {
+    tab = "scores"; nav();
+    const by = L.xpByDay(S), wk = L.weekPoints(S, now()), lv = L.levelInfo(L.xpTotal(S));
+    const DAYS = ["D", "L", "M", "M", "J", "V", "S"];
+    const days = Array.from({ length: 7 }, (_, i) => { const t = now() - (6 - i) * L.DAY; return { v: by[L.ymd(t)] || 0, d: DAYS[new Date(t).getDay()], today: i === 6 }; });
+    const max = Math.max(50, ...days.map(d => d.v));
+    const diff = wk.thisWeek - wk.lastWeek, wmax = Math.max(1, wk.thisWeek, wk.lastWeek);
+    const quizRows = UNITS().map(u => h("div", { class: "item" }, h("span", {}, unitLabel(u).split(" · ")[1] + " · " + u.title),
+      h("span", { class: "qbest" }, L.quizSets(u).map(set => { const r = S.quiz[set.id]; return h("span", { class: "qb" + (r && r.best >= 80 ? " pass" : r ? " tried" : "") }, set.name.slice(-1) + " ", r ? r.best + "%" : "–"); }))));
+    const fixed = Object.values(S.mistakes).filter(m => m.fixed && !m.d).length, words = liveCards().length, done = Object.values(S.lessons).filter(r => r.done).length;
+    const passed = Object.values(S.quiz).filter(r => r.best >= 80).length;
+    show(h("h1", {}, "Scoreboard"),
+      h("section", { class: "card" }, h("div", { class: "bigrow" }, h("div", { class: "lvbadge" }, h("b", {}, lv.level), h("span", {}, "niveau")),
+        h("div", { style: "flex:1;min-width:0;display:grid;gap:6px" }, h("h2", {}, lv.name), h("div", { class: "bar" }, h("i", { style: `width:${Math.round(lv.into / lv.need * 100)}%` })), h("span", { class: "small muted" }, `${lv.need - lv.into} pts to Niveau ${lv.level + 1} · ${lv.total} pts in total`)))),
+      h("section", { class: "card" }, h("h3", {}, "This week vs last week"),
+        h("div", { class: "vs" }, [["This week", wk.thisWeek, "accent"], ["Last week", wk.lastWeek, "ghost"]].map(([l, v, c]) => h("div", { class: "vsrow" }, h("span", {}, l), h("div", { class: "vsbar " + c }, h("i", { style: `width:${v / wmax * 100}%` })), h("b", {}, v)))),
+        h("p", { class: diff > 0 && wk.lastWeek ? "best" : "small muted" }, !wk.lastWeek ? "Next week, you'll race this week's score." : diff > 0 ? `You beat last week by ${diff} points!` : `${-diff + 1} more points to beat last week.`)),
+      h("section", { class: "card" }, h("h3", {}, "Last 7 days"),
+        h("div", { class: "days7", role: "img", "aria-label": days.map(d => d.v + " points").join(", ") }, days.map(d => h("div", { class: "d7" + (d.today ? " today" : "") }, h("span", { class: "v" }, d.v || ""), h("div", { class: "col" }, h("i", { style: `height:${d.v / max * 100}%` })), h("span", { class: "dl" }, d.d))))),
+      h("section", { class: "card" }, h("h3", {}, "Speed round high scores"), h("div", { class: "list" }, Object.entries(MODES).map(([k, m]) => { const r = S.speed[k]; return h("button", { type: "button", class: "item", on: { click: () => speedRound(k) } }, h("span", {}, m.name), h("b", { class: "hsv" }, r ? r.best : "–")); }))),
+      h("section", { class: "card" }, h("h3", {}, "Quiz bests"), h("div", { class: "list" }, quizRows)),
+      h("section", { class: "card" }, h("h3", {}, "All time"), h("div", { class: "stats four" }, stat(done, "lessons done"), stat(passed, "quizzes passed"), stat(words, "words"), stat(fixed, "mistakes fixed"))));
+  }
+
   function quizPage(u, set) {
     tab = "quizzes"; session = { mode: "quiz", steps: [], i: 0, right: 0, total: 0, wrong: 0, start: now() }; lastInput = now(); nav();
     let submitted = false, leaving = false;
@@ -241,11 +357,12 @@
       let right = 0; items.forEach(i => { if (i.mark() !== "wrong") right++; });
       const pct = Math.round(right / items.length * 100), old = S.quiz[set.id] || { best: 0, tries: 0 };
       S.quiz[set.id] = { best: Math.max(old.best || 0, pct), last: pct, tries: (old.tries || 0) + 1, at: now(), u: now() };
+      const gained = right * 5 + (pct >= 80 ? 50 : 0) + (old.best && pct > old.best ? 25 : 0); award(gained, "quizzes");
       const r = dayRec(); r.sessions++; r.u = now(); save();
       const wrong = items.length - right;
       banner.replaceChildren(h("div", { class: "score " + (pct >= 80 ? "pass" : "fail") }, h("b", {}, `${right} / ${items.length}`), h("span", {}, `${pct}%`)),
         h("div", {}, h("h2", {}, pct >= 80 ? "Bien joué !" : "Pas encore"), h("p", { class: "muted" }, (pct >= 80 ? "You passed this quiz. " : "You need 80% to pass. ") + (wrong ? `${wrong} ${wrong > 1 ? "mistakes went" : "mistake went"} to your mistake book. Scroll down to see each answer.` : "Every answer was right.")),
-          old.best && pct > old.best ? h("p", { class: "best" }, `New best! Up from ${old.best}%.`) : null));
+          old.best && pct > old.best ? h("p", { class: "best" }, `New best! Up from ${old.best}%.`) : null, h("p", { class: "best" }, `+${gained} points`)));
       submit.replaceWith(h("div", { class: "row" }, btn("Retake this quiz", () => quizPage(u, set), "primary"), btn("Back to quizzes", () => go("quizzes"), "quiet")));
       session = null; nav();
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -398,7 +515,7 @@
       const w = await fetch(url + "?on_conflict=user_id", { method: "POST", headers: { ...authHead(a), Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ user_id: a.uid, data: S, updated_at: new Date().toISOString() }) });
       if (!w.ok) throw new Error("write");
       setDot("Synced"); nav();
-      if (!session && tab !== "settings" && !loud && !view.contains(document.activeElement)) ({ today, course, quizzes, words, mistakes, progress })[tab]();
+      if (!session && tab !== "settings" && !loud && !view.contains(document.activeElement)) ({ today, course, quizzes, words, mistakes, progress, scores })[tab]();
     } catch (e) { setDot(e.message === "signin" ? "Sign in again to sync" : "Will sync when online"); }
     syncing = false;
   }
@@ -434,7 +551,7 @@
   }
   function header() {
     const p = session.steps.length ? session.i / session.steps.length * 100 : 0;
-    return h("div", { class: "progress" }, h("div", { class: "bar" }, h("i", { style: `width:${p}%` })), speedBtn(), h("button", { type: "button", class: "close", on: { click: () => endSession() } }, "Exit"));
+    return h("div", { class: "progress" }, h("div", { class: "bar" }, h("i", { style: `width:${p}%` })), session.xp ? h("span", { class: "xpchip" }, `+${session.xp}`) : null, speedBtn(), h("button", { type: "button", class: "close", on: { click: () => endSession() } }, "Exit"));
   }
   // Each tap moves to the next speed and replays the last French line, so you can compare.
   function speedBtn() {
@@ -454,7 +571,7 @@
     if (finished) { const r = dayRec(); if (now() - session.start > 6e4 || session.total > 0) r.sessions++; r.u = now(); save();
       const m = Math.max(1, Math.round((now() - session.start) / 6e4)), had = session.total, sc = had ? Math.round(session.right / had * 100) : null;
       const done = session; session = null; nav();
-      return show(h("div", { class: "card ruled" }, h("h1", {}, "Bien joué !"), h("p", {}, `${m} min${sc != null ? ` · ${sc}% correct` : ""}${done.wrong ? ` · ${done.wrong} added to your mistake book` : ""}`)),
+      return show(h("div", { class: "card ruled" }, h("h1", {}, "Bien joué !"), h("p", {}, `${m} min${sc != null ? ` · ${sc}% correct` : ""}${done.wrong ? ` · ${done.wrong} added to your mistake book` : ""}`), done.xp ? h("p", { class: "best" }, `+${done.xp} points`) : null), levelBar(),
         btn("Start another session", () => startSession("full"), "primary"), btn("Stop for today", () => go("today"), "quiet")); }
     save(); session = null; go("today");
   }
@@ -469,6 +586,7 @@
     const scored = s.l.questions.length, sc = session.lessonTotal ? Math.round(session.lessonRight / session.lessonTotal * 100) : 0;
     const passed = !s.l.isTest || sc >= 80;
     const old = S.lessons[s.l.id] || {};
+    if (passed && !old.done) award(s.l.isTest ? 100 : 50, "lessons");
     S.lessons[s.l.id] = passed ? { done: 1, score: sc, doneAt: (old.done && old.doneAt) || now(), u: now() } : { ...old, failed: 1, pct: Math.max(old.pct || 0, 90), u: now() };
     save();
     show(header(), h("div", { class: "card ruled" }, h("h2", {}, passed ? "Lesson complete" : "Not quite yet"), h("p", {}, `${sc}% on ${scored} questions.${passed ? "" : " You need 80% to pass. Your mistakes are saved, so review them and try again."}`)), btn("Continue", next, "primary"));
@@ -492,7 +610,7 @@
         h("div", {}, h("div", { class: "fr", lang: "fr" }, c.fr), shown ? h("p", {}, c.en) : h("p", { class: "muted" }, "Tap to hear it and see the meaning"))),
         shown ? h("div", { class: "row" }, btn("Didn't know", () => rate(false)), btn("Knew it", () => rate(true), "primary")) : null);
     };
-    const rate = knew => { const { id, ...c } = s.c; S.cards[id] = L.reviewCard(c, knew, now()); save(); nav(); next(); };
+    const rate = knew => { award(knew ? 5 : 2, "words"); const { id, ...c } = s.c; S.cards[id] = L.reviewCard(c, knew, now()); save(); nav(); next(); };
     draw();
   }
 
@@ -532,7 +650,8 @@
     const inp = body.querySelector("#ans"); if (inp) inp.focus();
   }
   function count(s, ok) {
-    if (s.review) { const { id, ...m } = s.review; S.mistakes[id] = L.reviewMistake(m, ok, now()); }
+    if (ok) award(10, "answers");
+    if (s.review) { const { id, ...m } = s.review; S.mistakes[id] = L.reviewMistake(m, ok, now()); if (S.mistakes[id].fixed) { award(20, "mistakes"); toast("Mistake fixed!", "+20 pts"); } }
     session.total++; if (ok) session.right++;
     if (s.l) { session.lessonTotal = (session.lessonTotal || 0) + 1; if (ok) session.lessonRight = (session.lessonRight || 0) + 1; }
     save();
@@ -566,6 +685,6 @@
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   window.speechSynthesis && window.speechSynthesis.getVoices();
-  go("today"); sync();
+  go("today"); sync(); checkLevel();
   window.__cahier = { get state() { return S; } };
 })();

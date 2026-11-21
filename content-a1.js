@@ -275,6 +275,20 @@
   };
 
   C.order = ["a1-u1", "a1-u2", "a1-u3"];
+  // Verb tables for speed rounds: je, tu, il/elle/on, nous, vous, ils/elles.
+  C.verbs = {
+    "être": ["suis", "es", "est", "sommes", "êtes", "sont"],
+    "avoir": ["ai", "as", "a", "avons", "avez", "ont"],
+    "aller": ["vais", "vas", "va", "allons", "allez", "vont"],
+    "faire": ["fais", "fais", "fait", "faisons", "faites", "font"],
+    "parler": ["parle", "parles", "parle", "parlons", "parlez", "parlent"],
+    "travailler": ["travaille", "travailles", "travaille", "travaillons", "travaillez", "travaillent"],
+    "aimer": ["aime", "aimes", "aime", "aimons", "aimez", "aiment"],
+    "manger": ["mange", "manges", "mange", "mangeons", "mangez", "mangent"],
+    "commencer": ["commence", "commences", "commence", "commençons", "commencez", "commencent"],
+    "préférer": ["préfère", "préfères", "préfère", "préférons", "préférez", "préfèrent"]
+  };
+  C.numbers = ["zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf", "vingt"];
   C.skills.push(
     { skill: "Speaking", title: "Talk about your week", task: "Say out loud which days you work, what you do in the evening, and one thing you like. Use Le lundi, je travaille, Le soir, je… and J'aime…" },
     { skill: "Writing", title: "Write about your day", task: "Write four sentences about a normal day: when you start work, what you use, where you go, and one thing you don't do.", writing: true },

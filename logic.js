@@ -49,7 +49,7 @@
     return out;
   }
   // Each record carries the time it changed, so the newest one wins on each device.
-  const MAPS = ["lessons", "cards", "mistakes", "accept", "days", "notes", "quiz"];
+  const MAPS = ["lessons", "cards", "mistakes", "accept", "days", "notes", "quiz", "xp", "speed"];
   function merge(a, b) {
     const out = { v: 1 }; a = a || {}; b = b || {};
     for (const k of MAPS) { const m = { ...(a[k] || {}) };
@@ -80,5 +80,44 @@
     QUIZ_TYPES.forEach(t => shuffle(pool.filter(q => q.type === t), unit.id + "|" + t).forEach(q => sets[k++ % n].push(q)));
     return sets.map((questions, i) => ({ id: unit.id + "-quiz-" + "ABCDEF"[i], name: "Quiz " + "ABCDEF"[i], questions }));
   }
-  root.Logic = { shuffle, quizSets, QUIZ_TYPES, clean, bare, lev, mark, reviewCard, reviewMistake, merge, pace, dayTotals, ymd, startOfDay, DAY };
+  // ---------- Points and levels ----------
+  // Each level needs 50 more points than the one before: 100, 150, 200…
+  const LEVEL_NAMES = [[1, "Débutant"], [3, "Apprenti"], [6, "Explorateur"], [10, "Voyageur"], [15, "Bavard"], [20, "Francophone"], [30, "Expert"]];
+  function levelInfo(total) {
+    let level = 1, start = 0, need = 100;
+    while (total >= start + need) { start += need; level++; need += 50; }
+    const name = LEVEL_NAMES.filter(([n]) => level >= n).pop()[1];
+    return { level, name, into: total - start, need, total };
+  }
+  // Points are stored per day and device, so phone and laptop never overwrite each other.
+  function xpByDay(s) { const t = {}; for (const [k, r] of Object.entries(s.xp || {})) { const d = k.split("|")[0]; t[d] = (t[d] || 0) + (r.pts || 0); } return t; }
+  const xpTotal = s => Object.values(s.xp || {}).reduce((n, r) => n + (r.pts || 0), 0);
+  function weekStart(t) { const d = new Date(startOfDay(t)); return d.getTime() - ((d.getDay() + 6) % 7) * DAY; }
+  function weekPoints(s, now) {
+    const by = xpByDay(s), ws = weekStart(now), sum = (a, b) => { let n = 0; for (let t = a; t < b; t += DAY) n += by[ymd(t + DAY / 2)] || 0; return n; };
+    return { thisWeek: sum(ws, ws + 7 * DAY), lastWeek: sum(ws - 7 * DAY, ws) };
+  }
+  // ---------- Speed round questions ----------
+  const PRON = [["je", 0], ["tu", 1], ["il", 2], ["elle", 2], ["on", 2], ["nous", 3], ["vous", 4], ["ils", 5], ["elles", 5]];
+  const pick = (a, r) => a[Math.floor(r() * a.length)];
+  function distinctOptions(answer, pool, r, n = 4) {
+    const others = shuffle([...new Set(pool.filter(x => x !== answer))], String(r()));
+    return shuffle([answer, ...others.slice(0, n - 1)], String(r()));
+  }
+  function verbQuestion(verbs, r) {
+    const [inf, forms] = pick(Object.entries(verbs), r), [pron, i] = pick(PRON, r), answer = forms[i];
+    const p = pron === "je" && /^[aeiouéèêh]/i.test(answer) ? "j'" : pron;
+    return { prompt: `${p} ___`, sub: inf, answer, options: distinctOptions(answer, forms, r), full: `${p}${p.endsWith("'") ? "" : " "}${answer}` };
+  }
+  function wordQuestion(vocab, r) {
+    const [fr, en] = pick(vocab, r);
+    return { prompt: fr, sub: "What does it mean?", answer: en, options: distinctOptions(en, vocab.map(v => v[1]), r), full: `${fr} = ${en}`, say: fr };
+  }
+  function numberQuestion(words, r) {
+    const n = Math.floor(r() * words.length), near = [n - 1, n + 1, n + 10, n - 10, (n + 3) % words.length].filter(x => x >= 0 && x < words.length).map(String);
+    return { prompt: words[n], sub: "Which number is it?", answer: String(n), options: distinctOptions(String(n), near.length >= 3 ? near : words.map((_, i) => String(i)), r), full: `${words[n]} = ${n}`, say: words[n] };
+  }
+  // Combo: 3 right in a row doubles points, 6 triples them.
+  const comboMult = c => c >= 6 ? 3 : c >= 3 ? 2 : 1;
+  root.Logic = { levelInfo, xpByDay, xpTotal, weekStart, weekPoints, verbQuestion, wordQuestion, numberQuestion, comboMult, seeded, shuffle, quizSets, QUIZ_TYPES, clean, bare, lev, mark, reviewCard, reviewMistake, merge, pace, dayTotals, ymd, startOfDay, DAY };
 })(typeof window !== "undefined" ? window : globalThis);
