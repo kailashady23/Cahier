@@ -49,7 +49,7 @@
     return out;
   }
   // Each record carries the time it changed, so the newest one wins on each device.
-  const MAPS = ["lessons", "cards", "mistakes", "accept", "days", "notes"];
+  const MAPS = ["lessons", "cards", "mistakes", "accept", "days", "notes", "quiz"];
   function merge(a, b) {
     const out = { v: 1 }; a = a || {}; b = b || {};
     for (const k of MAPS) { const m = { ...(a[k] || {}) };
@@ -68,5 +68,17 @@
     const measured = active >= 3, perDay = measured ? Math.max(recent / 14, 1 / 60) : 1;
     return { hours, measured, perDay, finish: now + (Math.max(totalHours - hours, 0) / perDay) * DAY };
   }
-  root.Logic = { clean, bare, lev, mark, reviewCard, reviewMistake, merge, pace, dayTotals, ymd, startOfDay, DAY };
+  // Seeded shuffle, so the app and the PDFs build the same quizzes.
+  function seeded(seed) { let x = 2166136261; for (const c of String(seed)) x = Math.imul(x ^ c.charCodeAt(0), 16777619); return () => { x = Math.imul(x ^ (x >>> 15), 2246822507) ^ Math.imul(x ^ (x >>> 13), 3266489909); return (x >>> 0) / 4294967296; }; }
+  function shuffle(a, seed) { const r = seeded(seed), b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
+  // Splits a module's questions into quiz sets with a mix of every question type.
+  // Listening is left out so each quiz matches its printed PDF.
+  const QUIZ_TYPES = ["match", "mc", "fill", "order", "translate"];
+  function quizSets(unit, n = 3) {
+    const pool = unit.lessons.flatMap((l, li) => l.questions.filter(q => q.type !== "listen").map(q => ({ ...q, lesson: l.id, lessonNo: li + 1 })));
+    const sets = Array.from({ length: n }, () => []); let k = 0;
+    QUIZ_TYPES.forEach(t => shuffle(pool.filter(q => q.type === t), unit.id + "|" + t).forEach(q => sets[k++ % n].push(q)));
+    return sets.map((questions, i) => ({ id: unit.id + "-quiz-" + "ABCDEF"[i], name: "Quiz " + "ABCDEF"[i], questions }));
+  }
+  root.Logic = { shuffle, quizSets, QUIZ_TYPES, clean, bare, lev, mark, reviewCard, reviewMistake, merge, pace, dayTotals, ymd, startOfDay, DAY };
 })(typeof window !== "undefined" ? window : globalThis);

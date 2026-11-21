@@ -77,7 +77,7 @@
   }, 5000);
 
   // ---------- Tabs ----------
-  const TABS = [["today", "Today"], ["course", "Course"], ["words", "Words"], ["mistakes", "Mistakes"]];
+  const TABS = [["today", "Today"], ["course", "Course"], ["quizzes", "Quizzes"], ["words", "Words"], ["mistakes", "Mistakes"]];
   function nav() {
     document.body.classList.toggle("focus", !!session);
     dock.replaceChildren(...TABS.map(([id, label]) => {
@@ -85,7 +85,7 @@
       return h("button", { type: "button", "aria-current": tab === id ? "page" : null, on: { click: () => go(id) } }, label, n ? h("span", { class: "badge" }, n) : null);
     }));
   }
-  function go(id) { tab = id; session = null; nav(); ({ today, course, words, mistakes, settings, progress })[id](); }
+  function go(id) { tab = id; session = null; nav(); ({ today, course, quizzes, words, mistakes, settings, progress })[id](); }
   document.getElementById("brand").addEventListener("click", () => { if (!session) go("today"); });
 
   // Line icons. These strings are fixed in the code, never user text.
@@ -196,6 +196,117 @@
     show(h("h1", {}, "Course"), rows);
   }
 
+  // ---------- Quizzes ----------
+  // Each module has 3 quizzes. All questions sit on one page; marking happens when you submit.
+  const SECT = { match: ["Relie", "Match each word to its meaning."], mc: ["Entoure", "Choose the right answer."], fill: ["Complète", "Write the missing word."], order: ["Remets dans l'ordre", "Tap the words in order."], translate: ["Traduis", "Write it in French."] };
+  const quizPdf = (u, set) => { const m = /^([a-z]\d)-u(\d+)$/i.exec(u.id); return `quizzes/Cahier-${m[1].toUpperCase()}-Module-${m[2]}-${set.name.replace(" ", "-")}.pdf`; };
+  function quizzes() {
+    show(h("h1", {}, "Quizzes"),
+      h("p", { class: "muted" }, "Three quizzes for each module. Answer every question on one page, then submit. 80% or more is a pass."),
+      UNITS().map(u => h("section", { class: "card" },
+        h("div", {}, h("span", { class: "eyebrow" }, unitLabel(u)), h("h2", {}, u.title)),
+        h("div", { class: "quizlist" }, L.quizSets(u).map(set => {
+          const r = S.quiz[set.id];
+          return h("div", { class: "quizrow" },
+            h("div", { class: "qinfo" }, h("b", {}, set.name), h("span", { class: "desc" }, `${set.questions.length} questions`),
+              r ? status(r.best >= 80 ? "done" : "retry") : null, r ? h("span", { class: "desc" }, `Best ${r.best}% · ${r.tries} ${r.tries > 1 ? "tries" : "try"}`) : null),
+            h("div", { class: "qbtns" },
+              h("button", { type: "button", class: "btn primary", on: { click: () => quizPage(u, set) } }, r ? "Retake" : "Start"),
+              h("a", { class: "btn quiet", href: quizPdf(u, set), download: quizPdf(u, set).split("/")[1] }, "PDF")));
+        })))));
+  }
+  function quizPage(u, set) {
+    tab = "quizzes"; session = { mode: "quiz", steps: [], i: 0, right: 0, total: 0, wrong: 0, start: now() }; lastInput = now(); nav();
+    let submitted = false, leaving = false;
+    const items = [], groups = {};
+    set.questions.forEach(q => (groups[q.type] = groups[q.type] || []).push(q));
+    let no = 0;
+    const sections = L.QUIZ_TYPES.filter(t => groups[t]).map((t, si) => h("section", { class: "qsec" },
+      h("h2", {}, h("span", { class: "num" }, si + 1), SECT[t][0], h("small", {}, SECT[t][1])),
+      groups[t].map(q => { const it = quizItem(q, ++no); items.push(it); return it.el; })));
+    const banner = h("div", { class: "qbanner", role: "status", "aria-live": "polite" });
+    const submit = btn("Submit quiz", () => trySubmit(), "primary"), warn = h("div", { class: "qwarn" });
+    const exit = h("button", { type: "button", class: "close", on: { click: () => {
+      if (!submitted && items.some(i => i.answered()) && !leaving) { leaving = true; exit.textContent = "Tap again to leave"; return; }
+      go("quizzes");
+    } } }, "Exit");
+    function trySubmit(force) {
+      const empty = items.filter(i => !i.answered());
+      if (empty.length && !force) {
+        warn.replaceChildren(h("p", {}, `${empty.length} ${empty.length > 1 ? "questions are" : "question is"} not answered yet.`),
+          h("div", { class: "row" }, btn("Go to the first one", () => { warn.replaceChildren(); empty[0].el.scrollIntoView({ block: "center", behavior: "smooth" }); }, "quiet"), btn("Submit anyway", () => trySubmit(true))));
+        return warn.scrollIntoView({ block: "nearest" });
+      }
+      submitted = true; warn.replaceChildren();
+      let right = 0; items.forEach(i => { if (i.mark() !== "wrong") right++; });
+      const pct = Math.round(right / items.length * 100), old = S.quiz[set.id] || { best: 0, tries: 0 };
+      S.quiz[set.id] = { best: Math.max(old.best || 0, pct), last: pct, tries: (old.tries || 0) + 1, at: now(), u: now() };
+      const r = dayRec(); r.sessions++; r.u = now(); save();
+      const wrong = items.length - right;
+      banner.replaceChildren(h("div", { class: "score " + (pct >= 80 ? "pass" : "fail") }, h("b", {}, `${right} / ${items.length}`), h("span", {}, `${pct}%`)),
+        h("div", {}, h("h2", {}, pct >= 80 ? "Bien joué !" : "Pas encore"), h("p", { class: "muted" }, (pct >= 80 ? "You passed this quiz. " : "You need 80% to pass. ") + (wrong ? `${wrong} ${wrong > 1 ? "mistakes went" : "mistake went"} to your mistake book. Scroll down to see each answer.` : "Every answer was right.")),
+          old.best && pct > old.best ? h("p", { class: "best" }, `New best! Up from ${old.best}%.`) : null));
+      submit.replaceWith(h("div", { class: "row" }, btn("Retake this quiz", () => quizPage(u, set), "primary"), btn("Back to quizzes", () => go("quizzes"), "quiet")));
+      session = null; nav();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    show(h("div", { class: "progress" }, h("span", { class: "eyebrow", style: "flex:1" }, `${unitLabel(u)} · ${set.name}`), speedBtn(), exit),
+      h("h1", {}, set.name + " · " + u.title), banner, sections, warn, submit);
+  }
+  // One quiz question: draws its input, reports whether it's answered, and marks itself.
+  function quizItem(q, no) {
+    const body = h("div", { class: "qbody" }), fb = h("div", { class: "qfb" });
+    const el = h("article", { class: "qitem", id: "qi-" + q.id }, h("div", { class: "qhead" }, h("span", { class: "qno" }, no), h("p", { class: q.type === "mc" ? "qprompt" : "qprompt hint2", lang: q.type === "mc" ? "fr" : "en" }, q.prompt.replace(/^Build: |^Write (the word )?in French: /, ""))), body, fb);
+    let get, answered, lock;
+    if (q.type === "mc") {
+      const opts = q.options.map(o => { const i = h("input", { type: "radio", name: q.id, value: o, id: q.id + "-" + q.options.indexOf(o) }); return { o, i, lab: h("label", { class: "qopt", for: i.id, lang: "fr" }, i, h("span", {}, o)) }; });
+      body.append(h("div", { class: "qopts" }, opts.map(x => x.lab)));
+      get = () => (opts.find(x => x.i.checked) || {}).o || ""; answered = () => !!get();
+      lock = res => opts.forEach(x => { x.i.disabled = true; if (x.o === q.answer) x.lab.classList.add("right"); else if (x.i.checked) x.lab.classList.add("wrong"); });
+    } else if (q.type === "fill" || q.type === "translate") {
+      const i = h("input", { type: "text", id: "in-" + q.id, lang: "fr", autocomplete: "off", autocapitalize: "none", spellcheck: "false", "aria-label": "Answer " + no });
+      const keys = h("div", { class: "keys small-keys" }, "éèêàçùôî".split("").map(ch => h("button", { type: "button", tabindex: "-1", lang: "fr", on: { pointerdown: e => { e.preventDefault(); const a = i.selectionStart ?? i.value.length; i.value = i.value.slice(0, a) + ch + i.value.slice(a); i.setSelectionRange(a + 1, a + 1); i.focus(); } } }, ch)));
+      keys.hidden = true; i.addEventListener("focus", () => { document.querySelectorAll(".small-keys").forEach(k => k.hidden = true); keys.hidden = false; });
+      body.append(q.type === "fill" ? h("div", { class: "fill", lang: "fr" }, q.before ? h("span", {}, q.before) : null, i, q.after ? h("span", {}, q.after) : null) : i, keys);
+      get = () => i.value.trim(); answered = () => !!get(); lock = () => { i.disabled = true; keys.remove(); };
+    } else if (q.type === "order") {
+      const pool = L.shuffle(q.words.map((w, id) => ({ w, id })), q.id + now()), sel = [], a = h("div", { class: "slots", "aria-label": "Your sentence" }), b = h("div", { class: "chips" });
+      let locked = false;
+      const r = () => { a.replaceChildren(...sel.map(x => h("button", { type: "button", class: "word", lang: "fr", disabled: locked, on: { click: () => { sel.splice(sel.indexOf(x), 1); pool.push(x); r(); } } }, x.w))); b.replaceChildren(...pool.map(x => h("button", { type: "button", class: "word", lang: "fr", disabled: locked, on: { click: () => { pool.splice(pool.indexOf(x), 1); sel.push(x); r(); } } }, x.w))); };
+      body.append(a, b); r();
+      get = () => sel.map(x => x.w).join(" "); answered = () => sel.length > 0; lock = () => { locked = true; r(); };
+    } else if (q.type === "match") {
+      const right = L.shuffle(q.pairs.map(p => p[1]), q.id + now());
+      const sels = q.pairs.map(([fr], k) => { const s = h("select", { id: `m-${q.id}-${k}`, "aria-label": "Meaning of " + fr }, h("option", { value: "" }, "Choose…"), right.map(t => h("option", { value: t }, t))); return { fr, s, row: h("label", { class: "mrow", for: `m-${q.id}-${k}` }, h("span", { lang: "fr" }, fr), s) }; });
+      body.append(h("div", { class: "mrows" }, sels.map(x => x.row)));
+      get = () => sels.map(x => x.s.value); answered = () => sels.every(x => x.s.value);
+      lock = () => sels.forEach((x, k) => { x.s.disabled = true; x.row.classList.add(x.s.value === q.pairs[k][1] ? "right" : "wrong"); });
+    }
+    const correctText = () => q.type === "mc" ? q.answer : q.type === "match" ? q.pairs.map(p => p.join(" = ")).join(" · ") : q.type === "order" ? q.accepted[0].replace(/ ([.,])/g, "$1") : q.type === "fill" ? `${q.before}${q.accepted[0]}${q.after}` : q.accepted[0];
+    function mark() {
+      // Blank answers count as wrong but don't fill your mistake book.
+      if (!answered()) { lock({ result: "wrong" }); el.classList.add("is-wrong"); fb.append(h("p", { class: "no" }, "Not answered. Correct answer: ", h("b", { lang: "fr" }, correctText()))); return "wrong"; }
+      const given = get(); let res;
+      if (q.type === "mc") res = { result: given === q.answer ? "right" : "wrong" };
+      else if (q.type === "match") res = { result: given.every((v, k) => v === q.pairs[k][1]) ? "right" : "wrong" };
+      else if (q.type === "order") res = L.mark(given, q.accepted, true);
+      else res = L.mark(given, accepted(q), q.strict);
+      lock(res); el.classList.add("is-" + res.result);
+      const shown = q.type === "match" ? "Pairs mixed up" : (given || "(blank)");
+      if (res.result === "right") fb.append(h("p", { class: "ok" }, "Correct. ", h("span", { class: "muted" }, q.why)));
+      else if (res.result === "slip") {
+        const add = h("div", { class: "row" }, btn("Add to mistake book", () => { addMistake(q, shown, res.kind); add.replaceWith(h("p", { class: "small" }, "Added to your mistake book.")); nav(); }, "quiet"));
+        fb.append(h("p", { class: "almost" }, `Almost. Check the ${res.kind === "accent" ? "accent" : "spelling"}. It still counts.`), h("p", {}, "Correct: ", h("b", { lang: "fr" }, correctText())), add);
+      } else {
+        addMistake(q, shown, "wrong");
+        fb.append(h("p", { class: "no" }, "Not this time. Correct answer: ", h("b", { lang: "fr" }, correctText())), h("p", { class: "muted small" }, q.why + " Added to your mistake book."),
+          (q.type === "fill" || q.type === "translate") && given ? h("button", { type: "button", class: "link", on: { click: e => { allow(q, given); e.currentTarget.replaceWith(h("span", { class: "small" }, "Saved as an accepted answer. It will count next time.")); } } }, "Count mine as correct") : null);
+      }
+      return res.result;
+    }
+    return { el, answered, mark };
+  }
+
   function words() {
     const fr = h("input", { type: "text", id: "w-fr", lang: "fr", autocomplete: "off", required: true }), en = h("input", { type: "text", id: "w-en", autocomplete: "off", required: true });
     const cards = liveCards().sort((a, b) => a.fr.localeCompare(b.fr, "fr"));
@@ -287,7 +398,7 @@
       const w = await fetch(url + "?on_conflict=user_id", { method: "POST", headers: { ...authHead(a), Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ user_id: a.uid, data: S, updated_at: new Date().toISOString() }) });
       if (!w.ok) throw new Error("write");
       setDot("Synced"); nav();
-      if (!session && tab !== "settings" && !loud && !view.contains(document.activeElement)) ({ today, course, words, mistakes, progress })[tab]();
+      if (!session && tab !== "settings" && !loud && !view.contains(document.activeElement)) ({ today, course, quizzes, words, mistakes, progress })[tab]();
     } catch (e) { setDot(e.message === "signin" ? "Sign in again to sync" : "Will sync when online"); }
     syncing = false;
   }
