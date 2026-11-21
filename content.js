@@ -83,7 +83,7 @@ window.COURSE = {
             { id: "q-l4-5", type: "fill", topic: "Être", prompt: "They are here.", before: "Ils ", after: " ici.", accepted: ["sont"], strict: true, why: "Ils and elles go with sont." },
             { id: "q-l4-6", type: "mc", topic: "Être", prompt: "Choose the correct sentence.", options: ["Je suis machiniste.", "Je suis un machiniste.", "Je es machiniste.", "Je est machiniste."], answer: "Je suis machiniste.", why: "Jobs after être don't take un or une." },
             { id: "q-l4-7", type: "order", topic: "Negation", prompt: "Build: I am not here.", words: ["Je", "ne", "suis", "pas", "ici", "."], accepted: ["Je ne suis pas ici ."], why: "Ne and pas go around the verb." },
-            { id: "q-l4-8", type: "translate", topic: "Être", prompt: "Write in French: I am Canadian. (choose your own form)", accepted: ["je suis canadien", "je suis canadienne"], why: "Use canadien for a man and canadienne for a woman." }
+            { id: "q-l4-8", type: "translate", topic: "Être", prompt: "Write in French: I am Canadian. (choose your own form)", accepted: ["Je suis canadien.", "Je suis canadienne."], why: "Use canadien for a man and canadienne for a woman." }
           ]
         },
         {

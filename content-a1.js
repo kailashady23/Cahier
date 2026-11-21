@@ -75,7 +75,7 @@
           { id: "q-m2-l4-3", type: "mc", topic: "Places", prompt: "Elle habite ___ France.", options: ["en", "au", "à", "aux"], answer: "en", why: "France is feminine: en France." },
           { id: "q-m2-l4-4", type: "fill", topic: "Places", prompt: "I come from Canada.", before: "Je viens ", after: " Canada.", accepted: ["du"], strict: true, why: "De + le becomes du." },
           { id: "q-m2-l4-5", type: "mc", topic: "Nationality", prompt: "Marie is French. Elle est…", options: ["française", "français", "France", "françaises"], answer: "française", why: "Add -e for a woman: française." },
-          { id: "q-m2-l4-6", type: "translate", topic: "Places", prompt: "Write in French: I live in Canada.", accepted: ["j'habite au canada"], why: "J'habite au Canada." },
+          { id: "q-m2-l4-6", type: "translate", topic: "Places", prompt: "Write in French: I live in Canada.", accepted: ["J'habite au Canada."], why: "J'habite au Canada." },
           { id: "q-m2-l4-7", type: "match", topic: "Vocabulary", prompt: "Match each phrase.", pairs: [["un pays", "a country"], ["une ville", "a city"], ["j'habite", "I live"], ["je viens de", "I come from"]], why: "You'll use these to introduce yourself." }
         ]
       },
@@ -112,7 +112,7 @@
           { id: "q-m2-l6-4", type: "order", topic: "Questions", prompt: "Build: Where do you live?", words: ["Où", "est-ce", "que", "tu", "habites", "?"], accepted: ["Où est-ce que tu habites ?"], why: "Question word, then est-ce que, then the rest." },
           { id: "q-m2-l6-5", type: "mc", topic: "Questions", prompt: "Choose: What is it?", options: ["Qu'est-ce que c'est ?", "Qui est-ce ?", "Où est-ce ?", "Comment c'est ?"], answer: "Qu'est-ce que c'est ?", why: "Qu'est-ce que c'est ? asks what something is. Qui est-ce ? asks who." },
           { id: "q-m2-l6-6", type: "match", topic: "Questions", prompt: "Match each word.", pairs: [["qui", "who"], ["quand", "when"], ["comment", "how"], ["combien", "how many"]], why: "Question words come up in almost every conversation." },
-          { id: "q-m2-l6-7", type: "translate", topic: "Questions", prompt: "Write in French: Who is it?", accepted: ["qui est-ce", "c'est qui"], why: "Qui est-ce ? or, casually, C'est qui ?" }
+          { id: "q-m2-l6-7", type: "translate", topic: "Questions", prompt: "Write in French: Who is it?", accepted: ["Qui est-ce ?", "C'est qui ?"], why: "Qui est-ce ? or, casually, C'est qui ?" }
         ]
       },
       {
@@ -231,7 +231,7 @@
           { id: "q-m3-l5-3", type: "fill", topic: "Likes", prompt: "She hates sport.", before: "Elle ", after: " le sport.", accepted: ["déteste"], strict: true, why: "Elle takes -e: déteste." },
           { id: "q-m3-l5-4", type: "order", topic: "Likes", prompt: "Build: I like to travel.", words: ["J'aime", "voyager", "."], accepted: ["J'aime voyager ."], why: "The second verb stays in its -er form." },
           { id: "q-m3-l5-5", type: "mc", topic: "Likes", prompt: "To say you like a coworker as a friend:", options: ["J'aime bien Marie.", "J'aime Marie.", "J'adore Marie.", "Je déteste Marie."], answer: "J'aime bien Marie.", why: "J'aime with a person means love. J'aime bien is safer." },
-          { id: "q-m3-l5-6", type: "translate", topic: "Likes", prompt: "Write in French: I love music.", accepted: ["j'adore la musique", "j'aime la musique"], why: "J'adore la musique, or j'aime la musique." },
+          { id: "q-m3-l5-6", type: "translate", topic: "Likes", prompt: "Write in French: I love music.", accepted: ["J'adore la musique.", "J'aime la musique."], why: "J'adore la musique, or j'aime la musique." },
           { id: "q-m3-l5-7", type: "match", topic: "Vocabulary", prompt: "Match each word.", pairs: [["aimer", "to like"], ["adorer", "to love"], ["détester", "to hate"], ["le travail", "work"]], why: "Use these to talk about yourself." }
         ]
       },
